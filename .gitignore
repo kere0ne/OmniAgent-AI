@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.env
+backend/*.db
+backend/data/
+.omniagent/
+node_modules/
+frontend/dist/
+.pytest_cache/
+*.log

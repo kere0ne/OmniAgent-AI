@@ -1,0 +1,18 @@
+FROM node:20-slim AS build
+WORKDIR /app
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm install --no-audit --no-fund
+COPY frontend/ .
+RUN npm run build
+
+FROM python:3.11-slim
+WORKDIR /app
+COPY --from=build /app/dist /app/frontend/dist
+COPY backend/ /app/backend/
+RUN pip install --no-cache-dir -r /app/backend/requirements.txt && useradd -m omni \
+    && mkdir -p /data && chown -R omni:omni /data /app
+USER omni
+ENV OMNI_DATA_DIR=/data
+WORKDIR /app/backend
+EXPOSE 8000
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
