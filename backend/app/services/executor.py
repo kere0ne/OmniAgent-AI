@@ -11,21 +11,28 @@ import os, resource, subprocess, signal, time
 
 _BLOCKED_BINARIES = {"sudo", "su", "mount", "umount", "ssh", "scp", "iptables", "nsenter"}
 
-def _limit(cpu, mem_mb, fsize_mb, nproc):
+def _shell() -> str:
+    for s in ("/bin/bash", "/usr/bin/bash", "/bin/sh", "/usr/bin/sh", "/busybox/sh"):
+        if os.path.exists(s):
+            return s
+    return "/bin/sh"
+
+def _limit(cpu, mem_mb, fsize_mb, nproc=0):
     def fn():
         mem = mem_mb * 1024 * 1024
         resource.setrlimit(resource.RLIMIT_CPU, (cpu, cpu))
         resource.setrlimit(resource.RLIMIT_AS, (mem, mem))
         resource.setrlimit(resource.RLIMIT_FSIZE, (fsize_mb * 1024 * 1024,) * 2)
-        try: resource.setrlimit(resource.RLIMIT_NPROC, (nproc, nproc))
-        except (ValueError, OSError): pass  # not permitted in some containers
+        if nproc:  # RLIMIT_NPROC is per-UID; skip on shared-UID hosts where it blocks every fork
+            try: resource.setrlimit(resource.RLIMIT_NPROC, (nproc, nproc))
+            except (ValueError, OSError): pass
         resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
         os.setsid()
     return fn
 
 def _clean_env(cwd, extra=None):
     env = {
-        "PATH": "/usr/local/bin:/usr/bin:/bin:/usr/sbin",
+        "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
         "HOME": cwd, "TERM": "xterm-256color", "LANG": "C.UTF-8",
         "PYTHONUNBUFFERED": "1", "npm_config_update_notifier": "false",
     }
@@ -40,10 +47,10 @@ def run(cmd: str, cwd: str, timeout: int = 60, env_extra: dict | None = None,
     start = time.time()
     try:
         p = subprocess.run(
-            ["/bin/bash", "-c", cmd], cwd=cwd,
+            [_shell(), "-c", cmd], cwd=cwd,
             env=_clean_env(cwd, env_extra),
             capture_output=True, text=True, timeout=timeout,
-            preexec_fn=_limit(cpu or 60, mem_mb or 768, 256, 128),
+            preexec_fn=_limit(cpu or 60, mem_mb or 768, 256),
         )
         return {"stdout": p.stdout[-200_000:], "stderr": p.stderr[-100_000:],
                 "exit_code": p.returncode, "timed_out": False, "duration_s": round(time.time() - start, 2)}
@@ -60,10 +67,10 @@ class ShellSession:
         self.cpu = cpu or 60
         self.mem_mb = mem_mb or 768
         self.p = subprocess.Popen(
-            ["/bin/bash", "--noprofile", "--norc", "-i"],
+            [_shell(), "-i"] if _shell().endswith("bash") else [_shell(), "-i"],
             cwd=cwd, env=_clean_env(cwd),
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            preexec_fn=_limit(self.cpu, self.mem_mb, 256, 128),
+            preexec_fn=_limit(self.cpu, self.mem_mb, 256),
             text=True, bufsize=1,
         )
         self.alive = True
