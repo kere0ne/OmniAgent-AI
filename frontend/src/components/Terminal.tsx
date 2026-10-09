@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { api, getToken } from "../api";
+import { api, apiOrigin, getToken } from "../api";
 
 export default function Terminal({ workspaceId }: { workspaceId: number }) {
   const [connected, setConnected] = useState(false);
@@ -15,8 +15,9 @@ export default function Terminal({ workspaceId }: { workspaceId: number }) {
       try {
         const s = await api(`/workspaces/${workspaceId}/terminal/open`, { method: "POST" });
         if (!alive) return;
-        const proto = location.protocol === "https:" ? "wss" : "ws";
-        ws = new WebSocket(`${proto}://${location.host}/api/ws/terminal/${s.session_id}?token=${getToken()}`);
+        const origin = new URL(apiOrigin());
+        const proto = origin.protocol === "https:" ? "wss" : "ws";
+        ws = new WebSocket(`${proto}://${origin.host}/api/ws/terminal/${s.session_id}?token=${getToken()}`);
         wsRef.current = ws;
         ws.onopen = () => setConnected(true);
         ws.onmessage = (e) => {

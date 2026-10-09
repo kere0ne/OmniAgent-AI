@@ -1,3 +1,6 @@
+const BASE = ((window as any).OMNI_API_BASE || "").replace(/\/$/, "");
+export function apiOrigin() { return BASE || window.location.origin; }
+
 let token = localStorage.getItem("omni_token") || "";
 export function setToken(t: string) {
   token = t;
@@ -10,7 +13,7 @@ export async function api(path: string, opts: any = {}): Promise<any> {
   if (opts.body && typeof opts.body !== "string" && !(opts.body instanceof FormData)) {
     opts = { ...opts, body: JSON.stringify(opts.body), headers: { ...headers, "Content-Type": "application/json" } };
   } else { opts = { ...opts, headers }; }
-  const r = await fetch(`/api${path}`, opts);
+  const r = await fetch(`${BASE}/api${path}`, opts);
   if (r.status === 401) { setToken(""); window.dispatchEvent(new Event("omni-logout")); throw new Error("Signed out or session expired"); }
   const text = await r.text();
   let data: any = null;
@@ -20,7 +23,7 @@ export async function api(path: string, opts: any = {}): Promise<any> {
 }
 
 export async function streamChat(body: any, onDelta: (s: string) => void): Promise<{ error?: string }> {
-  const r = await fetch("/api/chat/stream", {
+  const r = await fetch(`${BASE}/api/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(body),
